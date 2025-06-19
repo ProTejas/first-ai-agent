@@ -4,9 +4,10 @@ import cors from 'cors';
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import axios from 'axios';
 
 const app = express();
-const PORT = process.env.PORT || 2000;
+const PORT = process.env.PORT || 8000;
 
 // Middleware
 app.use(cors());
@@ -16,7 +17,10 @@ app.use(express.static('public'));
 // MongoDB Connection
 mongoose.connect('mongodb://127.0.0.1:27017/mcp_users')
   .then(() => console.log('Connected to MongoDB'))
-  .catch((err) => console.error('MongoDB connection error:', err));
+  .catch((err) => {
+    console.error('MongoDB connection error:', err);
+    process.exit(1); // Exit if DB connection fails
+  });
 
 // User Schema
 const userSchema = new mongoose.Schema({
@@ -51,7 +55,43 @@ const mcpServer = new McpServer({
   name: "User Registration Server",
   version: "1.0.0"
 });
+// Helper: Call Gemini LLM API
+async function getUserInfoFromPrompt(prompt) {
+  const GEMINI_API_KEY =  "AIzaSyCIV6sntXWa8lWTRp-02wkbYgurSX2JwI4";
+  if (!GEMINI_API_KEY) {
+    throw new Error('Gemini API key is not set in environment variables');
+  }
+  const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + GEMINI_API_KEY;
 
+  // Instruct Gemini to always return JSON with name, email, mobileNumber
+  const systemPrompt = `
+You are a helpful assistant. Extract the user's name, email, and mobile number from the following prompt. 
+Always respond ONLY in this JSON format: {"name": "...", "email": "...", "mobileNumber": "..."}
+If any field is missing, return null for that field.
+Prompt: ${prompt}
+`;
+
+  let response;
+  try {
+    response = await axios.post(GEMINI_API_URL, {
+      contents: [{ parts: [{ text: systemPrompt }] }]
+    });
+  } catch (err) {
+    throw new Error('Failed to call Gemini API: ' + (err.response?.data?.error?.message || err.message));
+  }
+
+  if (!response.data || !response.data.candidates || !response.data.candidates[0]?.content?.parts[0]?.text) {
+    throw new Error('Unexpected Gemini API response structure');
+  }
+  let text = response.data.candidates[0].content.parts[0].text;
+  // Remove Markdown code block if present
+  text = text.replace(/```json|```/g, '').trim();
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error('Failed to parse LLM response: ' + text);
+  }
+}
 // User registration logic
 async function userData(data) {
   if (!data || typeof data !== 'object') {
@@ -86,16 +126,28 @@ async function userData(data) {
 
 // POST API to register a user
 app.post('/api/register', async (req, res) => {
-  const { name, email, mobileNumber } = req.body;
-  if (!name || !email || !mobileNumber) {
-    return res.status(400).json({ error: 'Missing required fields: name, email, mobileNumber' });
+  res.setHeader('Content-Type', 'application/json');
+  const { prompt } = req.body;
+  if (!prompt || typeof prompt !== 'string' || prompt.length < 10) {
+    return res.status(400).json({ error: 'Prompt is required and must be a descriptive string.' });
   }
-  const result = await userData({ name, email, mobileNumber });
-  const content = result.content && result.content[0] && result.content[0].text ? JSON.parse(result.content[0].text) : result;
-  if (content.error) {
-    return res.status(400).json(content);
+  try {
+    const userInfo = await getUserInfoFromPrompt(prompt);
+    if (!userInfo.name || !userInfo.email || !userInfo.mobileNumber) {
+      return res.status(400).json({ error: 'Could not extract all required fields from prompt', userInfo });
+    }
+    const result = await userData(userInfo);
+    const content = result.content && result.content[0] && result.content[0].text ? JSON.parse(result.content[0].text) : result;
+    if (content.error) {
+      return res.status(400).json(content);
+    }
+    res.status(201).json(content);
+  } catch (error) {
+    if (error.message && error.message.includes('Gemini API key')) {
+      return res.status(500).json({ error: error.message });
+    }
+    res.status(500).json({ error: 'LLM processing failed', details: error.message });
   }
-  res.status(201).json(content);
 });
 
 // 📌 Register User
