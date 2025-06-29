@@ -7,7 +7,7 @@ import { z } from "zod";
 import axios from 'axios';
 
 const app = express();
-const PORT = process.env.PORT || 8000;
+const PORT = process.env.PORT || 4000;
 
 // Middleware
 app.use(cors());
@@ -57,19 +57,13 @@ const mcpServer = new McpServer({
 });
 // Helper: Call Gemini LLM API
 async function getUserInfoFromPrompt(prompt) {
-  const GEMINI_API_KEY =  "AIzaSyCIV6sntXWa8lWTRp-02wkbYgurSX2JwI4";
+  const GEMINI_API_KEY = "AIzaSyCIV6sntXWa8lWTRp-02wkbYgurSX2JwI4";
   if (!GEMINI_API_KEY) {
     throw new Error('Gemini API key is not set in environment variables');
   }
   const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + GEMINI_API_KEY;
 
-  // Instruct Gemini to always return JSON with name, email, mobileNumber
-  const systemPrompt = `
-You are a helpful assistant. Extract the user's name, email, and mobile number from the following prompt. 
-Always respond ONLY in this JSON format: {"name": "...", "email": "...", "mobileNumber": "..."}
-If any field is missing, return null for that field.
-Prompt: ${prompt}
-`;
+  const systemPrompt = `You are a helpful assistant. If the user provides their name, email, and mobile number, extract them and respond ONLY in this JSON format: {"name": "...", "email": "...", "mobileNumber": "..."}. If any field is missing, return null for that field. If the user does not provide this information, behave like a normal chatbot and assist the user. Prompt: ${prompt}`;
 
   let response;
   try {
@@ -86,11 +80,13 @@ Prompt: ${prompt}
   let text = response.data.candidates[0].content.parts[0].text;
   // Remove Markdown code block if present
   text = text.replace(/```json|```/g, '').trim();
+  let parsed = null;
   try {
-    return JSON.parse(text);
+    parsed = JSON.parse(text);
   } catch (e) {
-    throw new Error('Failed to parse LLM response: ' + text);
+    // Not JSON, treat as chat reply
   }
+  return { raw: text, parsed };
 }
 // User registration logic
 async function userData(data) {
@@ -128,20 +124,24 @@ async function userData(data) {
 app.post('/api/register', async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   const { prompt } = req.body;
-  if (!prompt || typeof prompt !== 'string' || prompt.length < 10) {
+  if (!prompt || typeof prompt !== 'string') {
     return res.status(400).json({ error: 'Prompt is required and must be a descriptive string.' });
   }
   try {
-    const userInfo = await getUserInfoFromPrompt(prompt);
-    if (!userInfo.name || !userInfo.email || !userInfo.mobileNumber) {
-      return res.status(400).json({ error: 'Could not extract all required fields from prompt', userInfo });
+    const { raw, parsed } = await getUserInfoFromPrompt(prompt);
+    // Check if parsed is an object with all user fields
+    if (parsed && parsed.name && parsed.email && parsed.mobileNumber) {
+      // Try to register user
+      const result = await userData(parsed);
+      const content = result.content && result.content[0] && result.content[0].text ? JSON.parse(result.content[0].text) : result;
+      if (content.error) {
+        return res.status(400).json(content);
+      }
+      return res.status(201).json(content);
+    } else {
+      // Not a registration, treat as chatbot reply
+      return res.status(200).json({ reply: raw });
     }
-    const result = await userData(userInfo);
-    const content = result.content && result.content[0] && result.content[0].text ? JSON.parse(result.content[0].text) : result;
-    if (content.error) {
-      return res.status(400).json(content);
-    }
-    res.status(201).json(content);
   } catch (error) {
     if (error.message && error.message.includes('Gemini API key')) {
       return res.status(500).json({ error: error.message });
@@ -169,6 +169,16 @@ mcpServer.tool('getAllUsers', {}, async () => {
     return {
       content: [{ type: 'text', text: JSON.stringify({ error: 'Error fetching users', details: error.message }) }]
     };
+  }
+});
+
+// GET API to fetch all users
+app.get('/api/users', async (req, res) => {
+  try {
+    const users = await User.find({}, '-__v');
+    res.status(200).json(users);
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching users', details: error.message });
   }
 });
 
