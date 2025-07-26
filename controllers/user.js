@@ -1,9 +1,10 @@
 import axios from 'axios';
 import User from '../models/user.js';
+import 'dotenv/config';
 
 // Helper: Call Gemini LLM API
 async function getUserInfoFromPrompt(prompt) {
-    const GEMINI_API_KEY = "AIzaSyCIV6sntXWa8lWTRp-02wkbYgurSX2JwI4";
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
     if (!GEMINI_API_KEY) {
         throw new Error('Gemini API key is not set in environment variables');
     }
