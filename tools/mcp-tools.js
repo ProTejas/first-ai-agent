@@ -1,4 +1,4 @@
-import { z } from "zod";
+/* import { z } from "zod";
 import User from '../models/user.js';
 import { mcpServer } from '../index.js';
 import { userData } from '../controllers/user.js';
@@ -23,4 +23,4 @@ mcpServer.tool('getAllUsers', {}, async () => {
             content: [{ type: 'text', text: JSON.stringify({ error: 'Error fetching users', details: error.message }) }]
         };
     }
-});
+}); */
