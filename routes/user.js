@@ -20,6 +20,9 @@ router.post('/api/register', async (req, res) => {
             if (content.error) {
                 return res.status(400).json(content);
             }
+            if (content.message === 'User registered successfully') {
+                return res.status(201).json({ message: 'Your register successful' });
+            }
             return res.status(201).json(content);
         } else {
             // Not a registration, treat as chatbot reply
