@@ -21,7 +21,7 @@ router.post('/api/register', async (req, res) => {
                 return res.status(400).json(content);
             }
             if (content.message === 'User registered successfully') {
-                return res.status(201).json({ message: 'Your register successful' });
+                return res.status(201).json({ reply: 'Your register successful' });
             }
             return res.status(201).json(content);
         } else {
