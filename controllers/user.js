@@ -90,8 +90,7 @@ async function openApiPrompt(req, res) {
         const conversation = [
             {
                 role: "system",
-                content: `
-                            You are a virtual assistant for Tata Capital.
+                content: `You are a virtual assistant for Tata Capital.
 
                             Rules:
                             1. Your job is to help users register for Tata Capital products.
@@ -164,7 +163,6 @@ async function openApiPrompt(req, res) {
                 return res.json({ reply: "User registered successfully." });
             }
         }
-
         // If no function call, return AI's message to continue the chat
         return res.json({ reply: message.content });
 
