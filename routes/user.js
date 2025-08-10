@@ -1,5 +1,5 @@
 import express from 'express';
-import { getUserInfoFromPrompt, userData } from '../controllers/user.js';
+import { getUserInfoFromPrompt, openApiPrompt, userData } from '../controllers/user.js';
 import User from '../models/user.js';
 const router = express.Router();
 
@@ -36,6 +36,10 @@ router.post('/api/register', async (req, res) => {
     }
 });
 
+router.post('/api/openai', async (req, res) => {
+    const apiResponse =  await openApiPrompt(req, res);
+    console.log(apiResponse);
+});
 // GET API to fetch all users
 router.get('/api/users', async (req, res) => {
     try {
