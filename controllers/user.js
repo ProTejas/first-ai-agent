@@ -93,7 +93,7 @@ async function openApiPrompt(req, res) {
                 content: `You are a virtual assistant for Tata Capital.
 
                             Rules:
-                            1. Your job is to help users register for Tata Capital products.
+                            1. Your job is to help users register for Tata Capital products OR verify an existing user.
                             2. A registration requires:
                             - Full name
                             - Email address
@@ -101,7 +101,9 @@ async function openApiPrompt(req, res) {
                             3. If the user gives all three details in one message, extract them immediately.
                             4. If details are missing, ask for only the missing ones politely.
                             5. Once all details are collected, return them via the "register_user" function call.
-                            6. For non-registration queries, answer only about Tata Capital products:
+                            6. To check if a user exists, use the "verify_user" function call (only mobile number needed).
+                            7. If user want check application status verify first, use the "verify_user" function call (only mobile number needed).
+                            8. For non-registration queries, answer only about Tata Capital products:
                             - Personal loans
                             - Business loans
                             - Home loans
@@ -109,6 +111,10 @@ async function openApiPrompt(req, res) {
                             - Fixed deposits
                             - EMI assistance
                             - Application status
+                            9. If some one ask about intrest on loan : 
+                               - Personal loan : 11%
+                               - Home Loan : 7.5%
+                               - Car loan : 11%
                             Always end with: “Is there anything else I can help you with?”.`
             },
             {
@@ -136,19 +142,33 @@ async function openApiPrompt(req, res) {
                             required: ["name", "email", "mobileNumber"]
                         }
                     }
+                },
+                {
+                    type: "function",
+                    function: {
+                        name: "verify_user",
+                        description: "Verify a Tata Capital user",
+                        parameters: {
+                            type: "object",
+                            properties: {
+                                mobileNumber: { type: "string" }
+                            },
+                            required: ["mobileNumber"]
+                        }
+                    }
                 }
             ]
         });
 
         const message = completion.choices[0].message;
 
-        // If the model triggered the registration function
         if (message.tool_calls && message.tool_calls.length > 0) {
             const toolCall = message.tool_calls[0];
+
+            // --- Registration handler ---
             if (toolCall.function.name === "register_user") {
                 const userData = JSON.parse(toolCall.function.arguments);
 
-                // Save to MongoDB
                 const existingUser = await User.findOne({
                     $or: [{ email: userData.email }, { mobileNumber: userData.mobileNumber }]
                 });
@@ -162,8 +182,24 @@ async function openApiPrompt(req, res) {
 
                 return res.json({ reply: "User registered successfully." });
             }
+
+            // --- Verification handler ---
+            if (toolCall.function.name === "verify_user") {
+                const { mobileNumber } = JSON.parse(toolCall.function.arguments);
+
+                const user = await User.findOne({ mobileNumber });
+
+                if (!user) {
+                    return res.json({ reply: "No user found with this mobile number." });
+                }
+
+                return res.json({
+                    reply: `User verified successfully. Name: ${user.name}, Email: ${user.email}, Mobile: ${user.mobileNumber}`
+                });
+            }
         }
-        // If no function call, return AI's message to continue the chat
+
+        // Normal assistant reply
         return res.json({ reply: message.content });
 
     } catch (error) {
@@ -171,6 +207,7 @@ async function openApiPrompt(req, res) {
         res.status(500).json({ error: "Error processing your request" });
     }
 }
+
 
 
 
