@@ -26,6 +26,15 @@ const userSchema = new mongoose.Schema({
     }
 });
 
-const User = mongoose.model('User', userSchema);
+const loanSchema = new mongoose.Schema({
+    productType: String,
+    name: String,
+    interestRate: String,
+    processingFee: String,
+    eligibility: String,
+    documents: [String],
+    description: String
+});
 
-export default User ;
+export const LoanProduct = mongoose.model("LoanProduct", loanSchema);
+export const User = mongoose.model('User', userSchema);

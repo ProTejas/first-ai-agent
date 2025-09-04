@@ -1,5 +1,5 @@
 import axios from 'axios';
-import User from '../models/user.js';
+import { User, LoanProduct } from '../models/user.js';
 import 'dotenv/config';
 import OpenAI from "openai";
 let userDetails = { name: null, email: null, mobileNumber: null };
@@ -156,7 +156,25 @@ async function openApiPrompt(req, res) {
                             required: ["mobileNumber"]
                         }
                     }
+                },
+                {
+                    type: "function",
+                    function: {
+                        name: "read_products_details",
+                        description: "Fetch details of a Tata Capital loan product",
+                        parameters: {
+                            type: "object",
+                            properties: {
+                                productType: {
+                                    type: "string",
+                                    enum: ["personal-loan", "home-loan", "car-loan", "two-wheeler-loan", "business-loan"]
+                                }
+                            },
+                            required: ["productType"]
+                        }
+                    }
                 }
+
             ]
         });
 
@@ -184,6 +202,28 @@ async function openApiPrompt(req, res) {
             }
 
             // --- Verification handler ---
+            if (toolCall.function.name === "read_products_details") {
+                const { productType } = JSON.parse(toolCall.function.arguments);
+
+                // Fetch product details from MongoDB
+                const productResponse = await LoanProduct.findOne({ productType });
+
+                if (!productResponse) {
+                    return res.json({ reply: `Sorry, I couldn’t find details for ${productType}.` });
+                }
+
+                return res.json({
+                    reply: `Here are the details for ${productResponse.name}:
+                            - Interest Rate: ${productResponse.interestRate}
+                            - Processing Fee: ${productResponse.processingFee}
+                            - Eligibility: ${productResponse.eligibility}
+                            - Documents Required: ${productResponse.documents.join(", ")}
+                            - Description: ${productResponse.description}
+                            
+                            Is there anything else I can help you with?`
+                });
+            }
+
             if (toolCall.function.name === "verify_user") {
                 const { mobileNumber } = JSON.parse(toolCall.function.arguments);
 
@@ -244,4 +284,3 @@ async function userData(data) {
 }
 
 export { getUserInfoFromPrompt, userData, openApiPrompt };
-
