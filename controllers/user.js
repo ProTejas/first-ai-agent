@@ -95,32 +95,30 @@ async function openApiPrompt(req, res) {
                             Rules:
                             1. Your job is to help users register for Tata Capital products OR verify an existing user.
                             2. A registration requires:
-                            - Full name
-                            - Email address
-                            - Mobile number
+                                - Full name
+                                - Email address
+                                - Mobile number
                             3. If the user gives all three details in one message, extract them immediately.
                             4. If details are missing, ask for only the missing ones politely.
                             5. Once all details are collected, return them via the "register_user" function call.
                             6. To check if a user exists, use the "verify_user" function call (only mobile number needed).
-                            7. If user want check application status verify first, use the "verify_user" function call (only mobile number needed).
-                            8. For non-registration queries, answer only about Tata Capital products:
-                            - Personal loans
-                            - Business loans
-                            - Home loans
-                            - Two-wheeler loans
-                            - Fixed deposits
-                            - EMI assistance
-                            - Application status
-                            9. If some one ask about intrest on loan : 
-                               - Personal loan : 11%
-                               - Home Loan : 7.5%
-                               - Car loan : 11%
+                            7. If user wants to check application status, verify first using the "verify_user" function call.
+                            8. If user wants to know loan product details (interest rate, eligibility, documents, etc.), use the "read_products_details" function call (requires productType).
+                            9. For non-registration queries, answer only about Tata Capital products:
+                                - Personal loans
+                                - Business loans
+                                - Home loans
+                                - Two-wheeler loans
+                                - Fixed deposits
+                                - EMI assistance
+                                - Application status
                             Always end with: “Is there anything else I can help you with?”.`
             },
             {
                 role: "user",
                 content: req.body.message
             }
+
         ];
 
         const completion = await openai.chat.completions.create({
@@ -167,13 +165,20 @@ async function openApiPrompt(req, res) {
                             properties: {
                                 productType: {
                                     type: "string",
-                                    enum: ["personal-loan", "home-loan", "car-loan", "two-wheeler-loan", "business-loan"]
+                                    enum: [
+                                        "personal loan",
+                                        "home loan",
+                                        "car loan",
+                                        "two wheeler loan",
+                                        "business loan"
+                                    ]
                                 }
                             },
                             required: ["productType"]
                         }
                     }
                 }
+
 
             ]
         });
@@ -203,26 +208,36 @@ async function openApiPrompt(req, res) {
 
             // --- Verification handler ---
             if (toolCall.function.name === "read_products_details") {
-                const { productType } = JSON.parse(toolCall.function.arguments);
+                let { productType } = JSON.parse(toolCall.function.arguments);
+                console.log("Raw productType from model:", productType);
 
-                // Fetch product details from MongoDB
+                // normalize: lowercase + replace spaces with hyphens
+                productType = productType.toLowerCase().replace(/\s+/g, "-");
+                console.log("Normalized productType:", productType);
+
                 const productResponse = await LoanProduct.findOne({ productType });
+                console.log("Product from DB:", productResponse);
 
                 if (!productResponse) {
-                    return res.json({ reply: `Sorry, I couldn’t find details for ${productType}.` });
+                    return res.json({
+                        reply: `Sorry, I couldn’t find details for ${productType}.`
+                    });
                 }
 
                 return res.json({
                     reply: `Here are the details for ${productResponse.name}:
-                            - Interest Rate: ${productResponse.interestRate}
-                            - Processing Fee: ${productResponse.processingFee}
-                            - Eligibility: ${productResponse.eligibility}
-                            - Documents Required: ${productResponse.documents.join(", ")}
-                            - Description: ${productResponse.description}
-                            
-                            Is there anything else I can help you with?`
+                        - Interest Rate: ${productResponse.interestRate}
+                        - Processing Fee: ${productResponse.processingFee}
+                        - Eligibility: ${productResponse.eligibility}
+                        - Documents Required: ${productResponse.documents.join(", ")}
+                        - Description: ${productResponse.description}
+
+                        Is there anything else I can help you with?`
                 });
             }
+
+
+
 
             if (toolCall.function.name === "verify_user") {
                 const { mobileNumber } = JSON.parse(toolCall.function.arguments);

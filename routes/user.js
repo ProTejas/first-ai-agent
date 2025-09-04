@@ -1,6 +1,6 @@
 import express from 'express';
 import { getUserInfoFromPrompt, openApiPrompt, userData } from '../controllers/user.js';
-import { User } from '../models/user.js';
+import { LoanProduct, User } from '../models/user.js';
 const router = express.Router();
 
 // POST API to register a user
@@ -38,13 +38,22 @@ router.post('/api/register', async (req, res) => {
 
 router.post('/api/openai', async (req, res) => {
     const apiResponse = await openApiPrompt(req, res);
-    console.log(apiResponse);
+    return (apiResponse);
 });
 // GET API to fetch all users
 router.get('/api/users', async (req, res) => {
     try {
         const users = await User.find({}, '-__v');
         res.status(200).json(users);
+    } catch (error) {
+        res.status(500).json({ error: 'Error fetching users', details: error.message });
+    }
+});
+router.get('/api/loanproducts', async (req, res) => {
+    try {
+    console.log('GET /api/loanproducts hit');
+        const product = await LoanProduct.find({});
+        res.status(200).json(product);
     } catch (error) {
         res.status(500).json({ error: 'Error fetching users', details: error.message });
     }

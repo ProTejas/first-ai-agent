@@ -36,5 +36,6 @@ const loanSchema = new mongoose.Schema({
     description: String
 });
 
-export const LoanProduct = mongoose.model("LoanProduct", loanSchema);
+export const LoanProduct = mongoose.model("LoanProduct", loanSchema, "products");
+
 export const User = mongoose.model('User', userSchema);
