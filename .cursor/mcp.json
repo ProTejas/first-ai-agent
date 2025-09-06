@@ -1,8 +1,0 @@
-{
-  "weather-data-dev": {
-    "command": "node",
-    "args": [
-      "D:/mymcp/index.js"
-    ]
-  }
-}
